@@ -1,21 +1,10 @@
-# REXPERTNET-R2 (DGL) — Query-specific Retrieval + Candidate Reranking (No Diffusion)
+# Retrieval-Augmented Evidence Reranking for Extrapolation on Temporal Knowledge Graph Reasoning (R2)
 
-本代码库基于 **DMSA** 原始实现（DGL 版）构建：数据预处理、数据加载、训练/测试循环、filtered evaluation 逻辑均保持一致。
-在 `model_name=rexpert` 时，使用本文实现的 **REXPERTNET-R2**（R²-DMSA）模型；在 `model_name=dmsa` 时，仍然运行原始 DMSA。
-
-本版本的目标不是“替换 diff_out 但整体与 DMSA 持平”，而是引入 **DMSA 主干难以吞掉的增量通路**：
-检索不再只是 logits 的小偏置或中间表示替换，而是进入 **候选集合构造与精排(rerank)**，并通过显式损失训练精排器。
+本代码库基于 **DMSA** 原始实现（DGL 版）构建。
 
 ---
 
-## 方法概览（与 DMSA 的关键区别）
-
-DMSA 主干：时序图编码（CompGCN + GRU）得到 `current_h`，再通过
-- NCE 分支（`calculate_nce_loss`）得到 `preds`
-- 判别增强分支 TimeConvTransE 得到 `score_enhanced`
-并融合成 `preds_total`，最后用于 filtered ranking。
-
-REXPERTNET-R2 的关键改动：
+## 方法概览
 
 1. **Query-specific Structure Recall（结构召回）**
    将历史缓冲区 `list_diff_data` 展平成历史事件集合 `hist_events`，对每个 query 通过结构匹配召回候选事件池：
@@ -34,8 +23,6 @@ REXPERTNET-R2 的关键改动：
    `Δ(o) = MLP([e_o || q || c])`，
    并将 `Δ` 回散到全实体 logits 上用于最终 ranking。
    训练时对候选集合显式加入 `lambda_rank * L_rank`，使精排器不会被 DMSA 主干“学会忽略”。
-
-> 重要：REXPERTNET-R2 **重写了 calculate_nce_loss**，保证检索 bias 不会在 forward 中被 diffusion/diffusion2 的两次调用覆盖（原先这会导致 bias 方向错配）。
 
 ---
 
@@ -72,7 +59,7 @@ python main.py --model_name dmsa --dataset ICEWS14s
 - `validate_every`: 每多少个 epoch 做一次验证（默认 `1`）
 - `validate_split`: 验证使用哪个 split（`test` 或 `valid`），默认 `test`
 
-### 检索相关参数（REXPERTNET-R2）
+### 检索相关参数
 
 - `retrieval_pool_size`: 每个 query 结构召回的证据池大小（建议 128~512）
 - `retrieval_topk`: 在证据池内做注意力汇聚时的 Top-K（建议 4~16）
@@ -82,7 +69,7 @@ python main.py --model_name dmsa --dataset ICEWS14s
 
 > 兼容：`max_hist_steps` 作为旧参数仍可在 config 中出现，会自动映射到 `retrieval_pool_size`。
 
-### 精排相关参数（REXPERTNET-R2）
+### 精排相关参数
 
 - `rerank_topm`: 从 DMSA 增强分支取 Top-M 候选加入候选集（建议 128~512）
 - `rerank_max_cands`: 最终候选集合预算（建议 256~1024）
